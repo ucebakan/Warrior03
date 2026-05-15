@@ -13,6 +13,10 @@ public class MobilePlayerMovement : MonoBehaviour
     [SerializeField] private float rotationSpeed = 12f;
     [SerializeField] private float moveDeadZone = 0.1f;
 
+    [Header("Gravity Settings")]
+    [SerializeField] private float gravity = -25f;
+    [SerializeField] private float groundedForce = -2f;
+
     [Header("Animation Settings")]
     [SerializeField] private float animatorDampTime = 0.08f;
     [SerializeField] private string speedParameterName = "Speed";
@@ -22,6 +26,7 @@ public class MobilePlayerMovement : MonoBehaviour
     [SerializeField] private float attackCooldown = 0.35f;
 
     private float lastAttackTime = -999f;
+    private float verticalVelocity;
 
     private void Awake()
     {
@@ -49,15 +54,12 @@ public class MobilePlayerMovement : MonoBehaviour
             inputMagnitude = 0f;
 
         Vector3 moveDirection = GetCameraRelativeDirection(joystickInput);
+        Vector3 horizontalMove = Vector3.zero;
 
         if (inputMagnitude > 0f)
         {
             float moveSpeed = CalculateMoveSpeed(inputMagnitude);
-
-            if (characterController != null)
-                characterController.Move(moveDirection * moveSpeed * Time.deltaTime);
-            else
-                transform.position += moveDirection * moveSpeed * Time.deltaTime;
+            horizontalMove = moveDirection * moveSpeed;
 
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
             transform.rotation = Quaternion.Slerp(
@@ -67,7 +69,30 @@ public class MobilePlayerMovement : MonoBehaviour
             );
         }
 
+        ApplyGravity();
+
+        Vector3 finalMove = horizontalMove;
+        finalMove.y = verticalVelocity;
+
+        if (characterController != null)
+            characterController.Move(finalMove * Time.deltaTime);
+        else
+            transform.position += finalMove * Time.deltaTime;
+
         UpdateAnimator(inputMagnitude);
+    }
+
+    private void ApplyGravity()
+    {
+        if (characterController == null)
+            return;
+
+        if (characterController.isGrounded && verticalVelocity < 0f)
+        {
+            verticalVelocity = groundedForce;
+        }
+
+        verticalVelocity += gravity * Time.deltaTime;
     }
 
     private void HandleAttackInput()
