@@ -28,22 +28,37 @@ public class PlayerXP : MonoBehaviour
     [SerializeField] private bool createXPUI = true;
     [SerializeField] private RectTransform hudParent;
     [SerializeField] private string generatedPanelName = "Generated_PlayerXPPanel";
-    [SerializeField] private bool liveRefreshUILayout = true;
+    [SerializeField] private bool showPanelBackground = false;
+
+    [Header("Live Play Mode Editing")]
+    [SerializeField] private bool liveRefreshInPlayMode = true;
+    [SerializeField, Min(0.02f)] private float liveRefreshInterval = 0.05f;
+    [SerializeField] private bool rebuildMissingUIElementsAutomatically = true;
 
     [Header("XP UI Icon")]
+    [SerializeField] private bool showXPIcon = false;
     [SerializeField] private Sprite xpIconSprite;
-    [SerializeField] private Vector2 iconPosition = new Vector2(-160f, 0f);
-    [SerializeField] private Vector2 iconSize = new Vector2(42f, 42f);
+    [SerializeField] private Vector2 iconPosition = new Vector2(-180f, 0f);
+    [SerializeField] private Vector2 iconSize = new Vector2(44f, 44f);
+
+    [Header("XP Bar Sprites")]
+    [SerializeField] private bool useSpriteBarVisuals = true;
+    [SerializeField] private Sprite xpBarBackgroundSprite;
+    [SerializeField] private Sprite xpBarFillSprite;
+    [SerializeField] private Sprite xpBarFrameSprite;
 
     [Header("XP UI Layout")]
     [SerializeField] private Vector2 panelAnchoredPosition = new Vector2(0f, -82f);
-    [SerializeField] private Vector2 panelSize = new Vector2(390f, 58f);
-    [SerializeField] private Vector2 levelTextPosition = new Vector2(-92f, 8f);
+    [SerializeField] private Vector2 panelSize = new Vector2(440f, 70f);
+
+    [SerializeField] private Vector2 levelTextPosition = new Vector2(-105f, 10f);
     [SerializeField] private Vector2 levelTextSize = new Vector2(100f, 30f);
-    [SerializeField] private Vector2 xpTextPosition = new Vector2(70f, 8f);
-    [SerializeField] private Vector2 xpTextSize = new Vector2(220f, 30f);
-    [SerializeField] private Vector2 barBackgroundPosition = new Vector2(42f, -18f);
-    [SerializeField] private Vector2 barBackgroundSize = new Vector2(285f, 12f);
+
+    [SerializeField] private Vector2 xpTextPosition = new Vector2(90f, 10f);
+    [SerializeField] private Vector2 xpTextSize = new Vector2(230f, 30f);
+
+    [SerializeField] private Vector2 barPosition = new Vector2(45f, -18f);
+    [SerializeField] private Vector2 barSize = new Vector2(320f, 24f);
 
     [Header("XP UI Text")]
     [SerializeField] private Font uiFont;
@@ -54,12 +69,14 @@ public class PlayerXP : MonoBehaviour
     [SerializeField] private string maxLevelText = "MAX";
 
     [Header("XP UI Colors - Hex")]
-    [SerializeField] private string panelColorHex = "#1F1A14CC";
+    [SerializeField] private string panelColorHex = "#00000000";
     [SerializeField] private string levelTextColorHex = "#F5D27A";
     [SerializeField] private string xpTextColorHex = "#FFFFFF";
-    [SerializeField] private string barBackgroundColorHex = "#000000AA";
-    [SerializeField] private string barFillColorHex = "#7DD3FC";
-    [SerializeField] private string fallbackIconColorHex = "#7DD3FC";
+    [SerializeField] private string barBackgroundColorHex = "#FFFFFF";
+    [SerializeField] private string barFillColorHex = "#FFFFFF";
+    [SerializeField] private string barFrameColorHex = "#FFFFFF";
+    [SerializeField] private string fallbackIconColorHex = "#C76ED6";
+    [SerializeField] private string fallbackBarFillColorHex = "#C76ED6";
 
     [Header("Debug")]
     [SerializeField] private bool enableDebugXPKey = true;
@@ -71,19 +88,27 @@ public class PlayerXP : MonoBehaviour
 
     private RectTransform panelRect;
     private Image panelImage;
+
     private Image iconImage;
     private RectTransform iconRect;
+
     private Text levelText;
     private Text xpText;
+
     private RectTransform barBackgroundRect;
     private Image barBackgroundImage;
+
     private RectTransform barFillRect;
     private Image barFillImage;
+
+    private RectTransform barFrameRect;
+    private Image barFrameImage;
 
     private Font cachedDefaultFont;
     private bool missingHUDWarningShown;
     private bool hasLoadedForCurrentSlot;
     private bool isApplicationQuitting;
+    private float nextLiveRefreshTime;
 
     public int CurrentLevel => currentLevel;
     public int CurrentXP => currentXP;
@@ -126,6 +151,7 @@ public class PlayerXP : MonoBehaviour
 
         TryLoadForCurrentSaveSlot();
         RefreshUI();
+        ApplyUILayout();
     }
 
     private void Update()
@@ -135,10 +161,18 @@ public class PlayerXP : MonoBehaviour
             AddExperience(debugXPAmount);
         }
 
-        if (liveRefreshUILayout && createXPUI && panelRect != null)
-        {
-            ApplyUILayout();
-        }
+        if (!Application.isPlaying)
+            return;
+
+        if (!liveRefreshInPlayMode)
+            return;
+
+        if (Time.unscaledTime < nextLiveRefreshTime)
+            return;
+
+        nextLiveRefreshTime = Time.unscaledTime + Mathf.Max(0.02f, liveRefreshInterval);
+
+        LiveRefreshUI();
     }
 
     private void OnDisable()
@@ -178,8 +212,22 @@ public class PlayerXP : MonoBehaviour
 
         if (Application.isPlaying)
         {
-            RefreshUI();
+            LiveRefreshUI();
         }
+    }
+
+    private void LiveRefreshUI()
+    {
+        if (!createXPUI)
+            return;
+
+        if (panelRect == null || rebuildMissingUIElementsAutomatically)
+        {
+            EnsureXPUI();
+        }
+
+        ApplyUILayout();
+        RefreshUI();
     }
 
     private void NormalizeValues()
@@ -200,6 +248,9 @@ public class PlayerXP : MonoBehaviour
         {
             currentXP = Mathf.Clamp(currentXP, 0, XPToNextLevel - 1);
         }
+
+        levelFontSize = Mathf.Max(8, levelFontSize);
+        xpFontSize = Mathf.Max(8, xpFontSize);
     }
 
     private void ResolveReferences()
@@ -571,15 +622,14 @@ public class PlayerXP : MonoBehaviour
             levelText = CreateUIText("LevelText", panelRect);
             xpText = CreateUIText("XPText", panelRect);
 
-            GameObject bgObject = new GameObject("XPBar_Background");
-            bgObject.transform.SetParent(panelRect, false);
-            barBackgroundRect = bgObject.AddComponent<RectTransform>();
-            barBackgroundImage = bgObject.AddComponent<Image>();
+            barBackgroundImage = CreateUIImage("XPBar_Background", panelRect);
+            barBackgroundRect = barBackgroundImage.rectTransform;
 
-            GameObject fillObject = new GameObject("XPBar_Fill");
-            fillObject.transform.SetParent(barBackgroundRect, false);
-            barFillRect = fillObject.AddComponent<RectTransform>();
-            barFillImage = fillObject.AddComponent<Image>();
+            barFillImage = CreateUIImage("XPBar_Fill", panelRect);
+            barFillRect = barFillImage.rectTransform;
+
+            barFrameImage = CreateUIImage("XPBar_Frame", panelRect);
+            barFrameRect = barFrameImage.rectTransform;
         }
         else
         {
@@ -603,51 +653,14 @@ public class PlayerXP : MonoBehaviour
             levelText = GetOrCreateText("LevelText", panelRect);
             xpText = GetOrCreateText("XPText", panelRect);
 
-            Transform bgTransform = panelRect.Find("XPBar_Background");
+            barBackgroundImage = GetOrCreateImage("XPBar_Background", panelRect);
+            barBackgroundRect = barBackgroundImage.rectTransform;
 
-            if (bgTransform == null)
-            {
-                GameObject bgObject = new GameObject("XPBar_Background");
-                bgObject.transform.SetParent(panelRect, false);
-                bgTransform = bgObject.transform;
-            }
+            barFillImage = GetOrCreateImage("XPBar_Fill", panelRect);
+            barFillRect = barFillImage.rectTransform;
 
-            barBackgroundRect = bgTransform.GetComponent<RectTransform>();
-
-            if (barBackgroundRect == null)
-            {
-                barBackgroundRect = bgTransform.gameObject.AddComponent<RectTransform>();
-            }
-
-            barBackgroundImage = bgTransform.GetComponent<Image>();
-
-            if (barBackgroundImage == null)
-            {
-                barBackgroundImage = bgTransform.gameObject.AddComponent<Image>();
-            }
-
-            Transform fillTransform = barBackgroundRect.Find("XPBar_Fill");
-
-            if (fillTransform == null)
-            {
-                GameObject fillObject = new GameObject("XPBar_Fill");
-                fillObject.transform.SetParent(barBackgroundRect, false);
-                fillTransform = fillObject.transform;
-            }
-
-            barFillRect = fillTransform.GetComponent<RectTransform>();
-
-            if (barFillRect == null)
-            {
-                barFillRect = fillTransform.gameObject.AddComponent<RectTransform>();
-            }
-
-            barFillImage = fillTransform.GetComponent<Image>();
-
-            if (barFillImage == null)
-            {
-                barFillImage = fillTransform.gameObject.AddComponent<Image>();
-            }
+            barFrameImage = GetOrCreateImage("XPBar_Frame", panelRect);
+            barFrameRect = barFrameImage.rectTransform;
         }
 
         ApplyUILayout();
@@ -681,7 +694,7 @@ public class PlayerXP : MonoBehaviour
 
         Image image = imageObject.AddComponent<Image>();
         image.raycastTarget = false;
-        image.preserveAspect = true;
+        image.preserveAspect = false;
 
         return image;
     }
@@ -700,7 +713,7 @@ public class PlayerXP : MonoBehaviour
             }
 
             image.raycastTarget = false;
-            image.preserveAspect = true;
+            image.preserveAspect = false;
             return image;
         }
 
@@ -764,10 +777,19 @@ public class PlayerXP : MonoBehaviour
 
         if (panelImage != null)
         {
+            panelImage.enabled = showPanelBackground;
             panelImage.color = GetColor(panelColorHex);
             panelImage.raycastTarget = false;
         }
 
+        ApplyIconLayout();
+        ApplyBarLayout();
+        ApplyTextLayout();
+        ApplySiblingOrder();
+    }
+
+    private void ApplyIconLayout()
+    {
         if (iconRect != null)
         {
             iconRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -779,11 +801,96 @@ public class PlayerXP : MonoBehaviour
 
         if (iconImage != null)
         {
+            iconImage.gameObject.SetActive(showXPIcon);
             iconImage.sprite = xpIconSprite;
             iconImage.color = xpIconSprite != null ? Color.white : GetColor(fallbackIconColorHex);
             iconImage.preserveAspect = true;
         }
+    }
 
+    private void ApplyBarLayout()
+    {
+        SetupBarImage(
+            barBackgroundRect,
+            barBackgroundImage,
+            xpBarBackgroundSprite,
+            GetColor(barBackgroundColorHex),
+            false
+        );
+
+        SetupBarImage(
+            barFillRect,
+            barFillImage,
+            xpBarFillSprite,
+            useSpriteBarVisuals && xpBarFillSprite != null ? GetColor(barFillColorHex) : GetColor(fallbackBarFillColorHex),
+            true
+        );
+
+        SetupBarImage(
+            barFrameRect,
+            barFrameImage,
+            xpBarFrameSprite,
+            GetColor(barFrameColorHex),
+            false
+        );
+
+        if (barFillImage != null)
+        {
+            if (useSpriteBarVisuals && xpBarFillSprite != null)
+            {
+                barFillImage.type = Image.Type.Filled;
+                barFillImage.fillMethod = Image.FillMethod.Horizontal;
+                barFillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+                barFillImage.fillAmount = XPPercent;
+            }
+            else
+            {
+                barFillImage.type = Image.Type.Simple;
+                barFillImage.fillAmount = 1f;
+
+                if (barFillRect != null)
+                {
+                    barFillRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    barFillRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    barFillRect.pivot = new Vector2(0f, 0.5f);
+                    barFillRect.anchoredPosition = new Vector2(
+                        barPosition.x - (barSize.x * 0.5f),
+                        barPosition.y
+                    );
+                    barFillRect.sizeDelta = new Vector2(barSize.x * XPPercent, barSize.y);
+                }
+            }
+        }
+    }
+
+    private void SetupBarImage(RectTransform rect, Image image, Sprite sprite, Color color, bool isFill)
+    {
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = barPosition;
+            rect.sizeDelta = barSize;
+        }
+
+        if (image != null)
+        {
+            image.sprite = useSpriteBarVisuals ? sprite : null;
+            image.color = color;
+            image.raycastTarget = false;
+            image.preserveAspect = false;
+
+            if (!isFill)
+            {
+                image.type = Image.Type.Simple;
+                image.fillAmount = 1f;
+            }
+        }
+    }
+
+    private void ApplyTextLayout()
+    {
         SetupText(
             levelText,
             levelTextPosition,
@@ -803,56 +910,27 @@ public class PlayerXP : MonoBehaviour
             GetColor(xpTextColorHex),
             TextAnchor.MiddleCenter
         );
+    }
 
-        if (barBackgroundRect != null)
-        {
-            barBackgroundRect.anchorMin = new Vector2(0.5f, 0.5f);
-            barBackgroundRect.anchorMax = new Vector2(0.5f, 0.5f);
-            barBackgroundRect.pivot = new Vector2(0.5f, 0.5f);
-            barBackgroundRect.anchoredPosition = barBackgroundPosition;
-            barBackgroundRect.sizeDelta = barBackgroundSize;
-        }
-
+    private void ApplySiblingOrder()
+    {
         if (barBackgroundImage != null)
-        {
-            barBackgroundImage.color = GetColor(barBackgroundColorHex);
-            barBackgroundImage.raycastTarget = false;
-        }
-
-        if (barFillRect != null)
-        {
-            barFillRect.anchorMin = new Vector2(0f, 0f);
-            barFillRect.anchorMax = new Vector2(XPPercent, 1f);
-            barFillRect.pivot = new Vector2(0f, 0.5f);
-            barFillRect.offsetMin = Vector2.zero;
-            barFillRect.offsetMax = Vector2.zero;
-        }
+            barBackgroundImage.transform.SetSiblingIndex(0);
 
         if (barFillImage != null)
-        {
-            barFillImage.color = GetColor(barFillColorHex);
-            barFillImage.raycastTarget = false;
-        }
+            barFillImage.transform.SetSiblingIndex(1);
 
-        if (barBackgroundRect != null)
-        {
-            barBackgroundRect.SetSiblingIndex(0);
-        }
+        if (barFrameImage != null)
+            barFrameImage.transform.SetSiblingIndex(2);
 
         if (iconImage != null)
-        {
-            iconImage.transform.SetSiblingIndex(1);
-        }
+            iconImage.transform.SetSiblingIndex(3);
 
         if (levelText != null)
-        {
-            levelText.transform.SetSiblingIndex(2);
-        }
+            levelText.transform.SetSiblingIndex(4);
 
         if (xpText != null)
-        {
-            xpText.transform.SetSiblingIndex(3);
-        }
+            xpText.transform.SetSiblingIndex(5);
     }
 
     private void SetupText(
@@ -910,12 +988,15 @@ public class PlayerXP : MonoBehaviour
             }
         }
 
-        if (barFillRect != null)
+        if (barFillImage != null)
         {
-            barFillRect.anchorMin = new Vector2(0f, 0f);
-            barFillRect.anchorMax = new Vector2(XPPercent, 1f);
-            barFillRect.offsetMin = Vector2.zero;
-            barFillRect.offsetMax = Vector2.zero;
+            if (useSpriteBarVisuals && xpBarFillSprite != null)
+            {
+                barFillImage.type = Image.Type.Filled;
+                barFillImage.fillMethod = Image.FillMethod.Horizontal;
+                barFillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+                barFillImage.fillAmount = XPPercent;
+            }
         }
     }
 
@@ -942,6 +1023,60 @@ public class PlayerXP : MonoBehaviour
         }
 
         return Color.white;
+    }
+
+    [ContextMenu("Refresh XP UI Now")]
+    private void DebugRefreshXPUI()
+    {
+        LiveRefreshUI();
+    }
+
+    [ContextMenu("Rebuild Generated XP UI")]
+    private void DebugRebuildGeneratedXPUI()
+    {
+        RebuildGeneratedXPUI();
+    }
+
+    public void RebuildGeneratedXPUI()
+    {
+        if (!createXPUI)
+            return;
+
+        EnsureHUDParent();
+
+        if (hudParent == null)
+            return;
+
+        Transform existingPanel = hudParent.Find(generatedPanelName);
+
+        if (existingPanel != null)
+        {
+            if (Application.isPlaying)
+            {
+                Destroy(existingPanel.gameObject);
+            }
+            else
+            {
+                DestroyImmediate(existingPanel.gameObject);
+            }
+        }
+
+        panelRect = null;
+        panelImage = null;
+        iconImage = null;
+        iconRect = null;
+        levelText = null;
+        xpText = null;
+        barBackgroundRect = null;
+        barBackgroundImage = null;
+        barFillRect = null;
+        barFillImage = null;
+        barFrameRect = null;
+        barFrameImage = null;
+
+        EnsureXPUI();
+        RefreshUI();
+        ApplyUILayout();
     }
 
     [ContextMenu("Debug Add XP")]

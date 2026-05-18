@@ -34,6 +34,12 @@ public class ZoneEnemyAI : MonoBehaviour
     [SerializeField] private float attackCooldown = 2f;
     [SerializeField] private string attackTriggerName = "";
 
+    [Header("Player Death / Zone Safety")]
+    [SerializeField] private bool forceReturnWhenPlayerIsInvalid = true;
+    [SerializeField] private bool forceReturnWhenPlayerOutsideZone = true;
+    [SerializeField] private float zoneOutsideTolerance = 0.15f;
+    [SerializeField] private bool blockAttackWhilePlayerDeadOrRespawning = true;
+
     [Header("Hit Reaction")]
     [SerializeField] private bool enableHitReaction = true;
     [SerializeField] private float hitReactionDuration = 0.10f;
@@ -52,7 +58,12 @@ public class ZoneEnemyAI : MonoBehaviour
     [SerializeField] private bool useSpeedParameter = true;
     [SerializeField] private string speedParameterName = "Speed";
 
+    [Header("Debug")]
+    [SerializeField] private bool logStateChanges = false;
+
     private State currentState;
+    private State lastLoggedState;
+
     private Vector3 roamTarget;
     private float idleTimer;
     private float nextAttackTime;
@@ -71,6 +82,7 @@ public class ZoneEnemyAI : MonoBehaviour
     {
         AutoSetupReferences();
         EnterIdle();
+        lastLoggedState = currentState;
     }
 
     private void Update()
@@ -87,13 +99,40 @@ public class ZoneEnemyAI : MonoBehaviour
         Transform player = zoneMember.CurrentPlayer;
         bool hasPlayerInZone = zoneMember.HasPlayerInZone && player != null;
 
+        if (hasPlayerInZone && !IsPlayerValidForCombat(player))
+        {
+            if (forceReturnWhenPlayerIsInvalid)
+            {
+                ForceReturnHome();
+            }
+            else
+            {
+                EnterIdle();
+            }
+
+            return;
+        }
+
+        if (hasPlayerInZone && forceReturnWhenPlayerOutsideZone && !IsPlayerActuallyInsideZone(player))
+        {
+            if (zoneMember.MobZone != null)
+            {
+                zoneMember.MobZone.ForceClearPlayer();
+            }
+
+            ForceReturnHome();
+            return;
+        }
+
         if (hasPlayerInZone)
         {
             HandleCombat(player);
+            LogStateIfChanged();
             return;
         }
 
         HandleNoPlayerBehavior();
+        LogStateIfChanged();
     }
 
     private void AutoSetupReferences()
@@ -114,8 +153,69 @@ public class ZoneEnemyAI : MonoBehaviour
         }
     }
 
+    private bool IsPlayerValidForCombat(Transform player)
+    {
+        if (player == null)
+            return false;
+
+        if (!blockAttackWhilePlayerDeadOrRespawning)
+            return true;
+
+        PlayerHealth playerHealth = player.GetComponent<PlayerHealth>();
+
+        if (playerHealth == null)
+            playerHealth = player.GetComponentInChildren<PlayerHealth>();
+
+        if (playerHealth == null)
+            playerHealth = player.GetComponentInParent<PlayerHealth>();
+
+        if (playerHealth != null && playerHealth.IsDead)
+            return false;
+
+        PlayerRespawnController respawnController = player.GetComponent<PlayerRespawnController>();
+
+        if (respawnController == null)
+            respawnController = player.GetComponentInChildren<PlayerRespawnController>();
+
+        if (respawnController == null)
+            respawnController = player.GetComponentInParent<PlayerRespawnController>();
+
+        if (respawnController != null && respawnController.IsRespawning)
+            return false;
+
+        return true;
+    }
+
+    private bool IsPlayerActuallyInsideZone(Transform player)
+    {
+        if (player == null)
+            return false;
+
+        if (zoneMember == null || zoneMember.MobZone == null)
+            return false;
+
+        return zoneMember.MobZone.IsTransformInsideZone(player, zoneOutsideTolerance);
+    }
+
     private void HandleCombat(Transform player)
     {
+        if (!IsPlayerValidForCombat(player))
+        {
+            ForceReturnHome();
+            return;
+        }
+
+        if (forceReturnWhenPlayerOutsideZone && !IsPlayerActuallyInsideZone(player))
+        {
+            if (zoneMember.MobZone != null)
+            {
+                zoneMember.MobZone.ForceClearPlayer();
+            }
+
+            ForceReturnHome();
+            return;
+        }
+
         float distanceToPlayer = DistanceXZ(transform.position, player.position);
 
         if (distanceToPlayer <= attackRange)
@@ -188,6 +288,30 @@ public class ZoneEnemyAI : MonoBehaviour
         SetAnimatorSpeed(0f);
     }
 
+    public void ForceReturnHome()
+    {
+        isHitReacting = false;
+
+        if (zoneMember == null)
+        {
+            EnterIdle();
+            return;
+        }
+
+        float distanceToHome = DistanceXZ(transform.position, zoneMember.HomePosition);
+
+        if (distanceToHome > returnStopDistance)
+        {
+            currentState = State.ReturnHome;
+            SetAnimatorSpeed(0.5f);
+        }
+        else
+        {
+            transform.position = GetGroundAdjustedPosition(zoneMember.HomePosition);
+            EnterIdle();
+        }
+    }
+
     private void PickRoamTarget()
     {
         Vector2 randomCircle = Random.insideUnitCircle * roamRadius;
@@ -198,10 +322,14 @@ public class ZoneEnemyAI : MonoBehaviour
 
     private void MoveTo(Vector3 targetWorldPosition, float moveSpeed)
     {
-        Vector3 groundedTarget = GetGroundAdjustedPosition(targetWorldPosition);
+        Vector3 clampedTarget = ClampPointInsideZone(targetWorldPosition);
+        Vector3 groundedTarget = GetGroundAdjustedPosition(clampedTarget);
 
         Vector3 current = transform.position;
         Vector3 next = Vector3.MoveTowards(current, groundedTarget, moveSpeed * Time.deltaTime);
+
+        next = ClampPointInsideZone(next);
+        next = GetGroundAdjustedPosition(next);
 
         transform.position = next;
         FaceTarget(groundedTarget);
@@ -226,6 +354,9 @@ public class ZoneEnemyAI : MonoBehaviour
 
     private void TryAttack(Transform player)
     {
+        if (!IsPlayerValidForCombat(player))
+            return;
+
         if (Time.time < nextAttackTime)
             return;
 
@@ -287,7 +418,7 @@ public class ZoneEnemyAI : MonoBehaviour
 
         Vector3 sourcePosition = transform.position - transform.forward;
 
-        if (zoneMember != null && zoneMember.CurrentPlayer != null)
+        if (zoneMember != null && zoneMember.CurrentPlayer != null && IsPlayerValidForCombat(zoneMember.CurrentPlayer))
         {
             sourcePosition = zoneMember.CurrentPlayer.position;
         }
@@ -322,6 +453,9 @@ public class ZoneEnemyAI : MonoBehaviour
             hitReactionMoveSpeed * Time.deltaTime
         );
 
+        next = ClampPointInsideZone(next);
+        next = GetGroundAdjustedPosition(next);
+
         transform.position = next;
         SetAnimatorSpeed(0f);
         StickToGroundAtCurrentPosition();
@@ -349,7 +483,7 @@ public class ZoneEnemyAI : MonoBehaviour
 
         if (flatOffset.magnitude > zoneRadius)
         {
-            flatOffset = flatOffset.normalized * (zoneRadius - 0.05f);
+            flatOffset = flatOffset.normalized * Mathf.Max(0f, zoneRadius - 0.05f);
         }
 
         return new Vector3(
@@ -459,5 +593,17 @@ public class ZoneEnemyAI : MonoBehaviour
             return;
 
         animator.SetFloat(speedParameterName, value);
+    }
+
+    private void LogStateIfChanged()
+    {
+        if (!logStateChanges)
+            return;
+
+        if (currentState == lastLoggedState)
+            return;
+
+        Debug.Log($"{name} | ZoneEnemyAI State: {lastLoggedState} -> {currentState}", this);
+        lastLoggedState = currentState;
     }
 }

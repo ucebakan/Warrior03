@@ -8020,6 +8020,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoneCenter: {fileID: 121713995}
   zoneTrigger: {fileID: 121713996}
+  playerTag: Player
+  validatePlayerByDistanceEveryFrame: 1
+  outsideTolerance: 0.15
+  clearWhenPlayerDeadOrRespawning: 1
+  logZoneEvents: 0
 --- !u!4 &121852889 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1778994357615247706, guid: ef62619642b0df743b22dd5120c6ac4d,
@@ -19862,6 +19867,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoneCenter: {fileID: 309846198}
   zoneTrigger: {fileID: 309846200}
+  playerTag: Player
+  validatePlayerByDistanceEveryFrame: 1
+  outsideTolerance: 0.15
+  clearWhenPlayerDeadOrRespawning: 1
+  logZoneEvents: 0
 --- !u!135 &309846200
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -22445,6 +22455,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoneCenter: {fileID: 349539024}
   zoneTrigger: {fileID: 349539026}
+  playerTag: Player
+  validatePlayerByDistanceEveryFrame: 1
+  outsideTolerance: 0.15
+  clearWhenPlayerDeadOrRespawning: 1
+  logZoneEvents: 0
 --- !u!135 &349539026
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -94369,6 +94384,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoneCenter: {fileID: 1530824286}
   zoneTrigger: {fileID: 1530824288}
+  playerTag: Player
+  validatePlayerByDistanceEveryFrame: 1
+  outsideTolerance: 0.15
+  clearWhenPlayerDeadOrRespawning: 1
+  logZoneEvents: 0
 --- !u!135 &1530824288
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -103094,6 +103114,9 @@ MonoBehaviour:
   invulnerabilityAfterRespawn: 1.5
   resetRotationOnRespawn: 1
   clearRigidbodyVelocity: 1
+  clearMobZonesOnDeath: 1
+  forceZoneEnemiesReturnHomeOnDeath: 1
+  repeatEnemyResetAfterRespawnMove: 1
   playerAnimator: {fileID: 0}
   useAnimatorTriggers: 0
   deathTriggerName: Death
@@ -103177,35 +103200,46 @@ MonoBehaviour:
   maxLevel: 50
   baseXPToNextLevel: 100
   xpRequirementMultiplier: 1.25
-  currentLevel: 1
-  currentXP: 0
+  currentLevel: 5
+  currentXP: 182
   createXPUI: 1
   hudParent: {fileID: 357536734}
   generatedPanelName: Generated_PlayerXPPanel
-  liveRefreshUILayout: 1
-  xpIconSprite: {fileID: 0}
+  showPanelBackground: 0
+  liveRefreshInPlayMode: 1
+  liveRefreshInterval: 0.05
+  rebuildMissingUIElementsAutomatically: 1
+  showXPIcon: 0
+  xpIconSprite: {fileID: 21300000, guid: 7929cdfba854a534b81141de8287c6d2, type: 3}
   iconPosition: {x: -160, y: 0}
   iconSize: {x: 42, y: 42}
-  panelAnchoredPosition: {x: 0, y: -82}
+  useSpriteBarVisuals: 1
+  xpBarBackgroundSprite: {fileID: 21300000, guid: 1a2e53c21403b3c439211b6101788cce,
+    type: 3}
+  xpBarFillSprite: {fileID: 21300000, guid: e555e7ed30188774c98fc9ece84e2be3, type: 3}
+  xpBarFrameSprite: {fileID: 21300000, guid: 9847e96d8d8d0fe499c15a95374b50ea, type: 3}
+  panelAnchoredPosition: {x: 0, y: -80}
   panelSize: {x: 360, y: 52}
-  levelTextPosition: {x: -145, y: 0}
+  levelTextPosition: {x: -180, y: 0}
   levelTextSize: {x: 80, y: 40}
-  xpTextPosition: {x: 55, y: 0}
+  xpTextPosition: {x: 0, y: 0}
   xpTextSize: {x: 230, y: 40}
-  barBackgroundPosition: {x: 55, y: -22}
-  barBackgroundSize: {x: 235, y: 10}
+  barPosition: {x: 0, y: 0}
+  barSize: {x: 320, y: 24}
   uiFont: {fileID: 0}
   levelFontSize: 18
   xpFontSize: 15
   levelPrefix: 'Lv. '
   xpPrefix: 'XP: '
   maxLevelText: MAX
-  panelColorHex: '#1F1A14CC'
-  levelTextColorHex: '#F5D27A'
-  xpTextColorHex: '#FFFFFF'
-  barBackgroundColorHex: '#000000AA'
-  barFillColorHex: '#7DD3FC'
-  fallbackIconColorHex: '#7DD3FC'
+  panelColorHex: 0
+  levelTextColorHex: 0
+  xpTextColorHex: 0
+  barBackgroundColorHex: 0
+  barFillColorHex: 0
+  barFrameColorHex: 0
+  fallbackIconColorHex: 0
+  fallbackBarFillColorHex: 0
   enableDebugXPKey: 1
   debugAddXPKey: 120
   debugXPAmount: 25
@@ -123507,6 +123541,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoneCenter: {fileID: 2022977996}
   zoneTrigger: {fileID: 2022977998}
+  playerTag: Player
+  validatePlayerByDistanceEveryFrame: 1
+  outsideTolerance: 0.15
+  clearWhenPlayerDeadOrRespawning: 1
+  logZoneEvents: 0
 --- !u!135 &2022977998
 SphereCollider:
   m_ObjectHideFlags: 0

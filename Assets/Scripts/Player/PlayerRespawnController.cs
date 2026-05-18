@@ -24,6 +24,11 @@ public class PlayerRespawnController : MonoBehaviour
     [SerializeField] private bool resetRotationOnRespawn = true;
     [SerializeField] private bool clearRigidbodyVelocity = true;
 
+    [Header("Enemy Reset On Death/Respawn")]
+    [SerializeField] private bool clearMobZonesOnDeath = true;
+    [SerializeField] private bool forceZoneEnemiesReturnHomeOnDeath = true;
+    [SerializeField] private bool repeatEnemyResetAfterRespawnMove = true;
+
     [Header("Optional Animator")]
     [SerializeField] private Animator playerAnimator;
     [SerializeField] private bool useAnimatorTriggers = false;
@@ -90,6 +95,8 @@ public class PlayerRespawnController : MonoBehaviour
 
         OnRespawnSequenceStarted?.Invoke();
 
+        ResetEnemyZoneCombatState();
+
         SetGameplayControl(false);
         SetDeathVisibility(false);
 
@@ -101,6 +108,11 @@ public class PlayerRespawnController : MonoBehaviour
         yield return new WaitForSeconds(respawnDelay);
 
         MovePlayerToRespawnPoint();
+
+        if (repeatEnemyResetAfterRespawnMove)
+        {
+            ResetEnemyZoneCombatState();
+        }
 
         if (playerHealth != null)
         {
@@ -122,6 +134,45 @@ public class PlayerRespawnController : MonoBehaviour
 
         OnRespawnSequenceFinished?.Invoke();
         respawnRoutine = null;
+    }
+
+    private void ResetEnemyZoneCombatState()
+    {
+        if (clearMobZonesOnDeath)
+        {
+            MobZone[] mobZones = FindObjectsOfType<MobZone>(true);
+
+            for (int i = 0; i < mobZones.Length; i++)
+            {
+                if (mobZones[i] == null)
+                    continue;
+
+                mobZones[i].ForceClearPlayer();
+            }
+
+            if (logRespawnSteps)
+            {
+                Debug.Log($"PlayerRespawnController: Cleared {mobZones.Length} MobZone player references.");
+            }
+        }
+
+        if (forceZoneEnemiesReturnHomeOnDeath)
+        {
+            ZoneEnemyAI[] zoneEnemies = FindObjectsOfType<ZoneEnemyAI>(true);
+
+            for (int i = 0; i < zoneEnemies.Length; i++)
+            {
+                if (zoneEnemies[i] == null)
+                    continue;
+
+                zoneEnemies[i].ForceReturnHome();
+            }
+
+            if (logRespawnSteps)
+            {
+                Debug.Log($"PlayerRespawnController: Forced {zoneEnemies.Length} ZoneEnemyAI enemies to return home.");
+            }
+        }
     }
 
     private void MovePlayerToRespawnPoint()
