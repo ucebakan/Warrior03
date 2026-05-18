@@ -10004,6 +10004,22 @@ MonoBehaviour:
   damage: 1
   attackCooldown: 3
   attackTriggerName: 
+  forceReturnWhenPlayerIsInvalid: 1
+  forceReturnWhenPlayerOutsideZone: 1
+  zoneOutsideTolerance: 0.15
+  blockAttackWhilePlayerDeadOrRespawning: 1
+  useCrowdSpacing: 1
+  enemySpacingMask:
+    serializedVersion: 2
+    m_Bits: 64
+  enemySeparationRadius: 0.85
+  enemySeparationStrength: 1.4
+  enemySeparationMaxStep: 0.055
+  keepPlayerBreathingRoom: 1
+  playerPersonalSpaceRadius: 1.05
+  playerPushAwayStrength: 1.8
+  playerPushAwayMaxStep: 0.07
+  applySpacingWhileAttacking: 1
   enableHitReaction: 1
   hitReactionDuration: 0.1
   hitReactionDistance: 1
@@ -10018,6 +10034,7 @@ MonoBehaviour:
   ignoreParticleRenderers: 1
   useSpeedParameter: 1
   speedParameterName: 
+  logStateChanges: 0
 --- !u!114 &476289533542675829
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -40,6 +40,18 @@ public class ZoneEnemyAI : MonoBehaviour
     [SerializeField] private float zoneOutsideTolerance = 0.15f;
     [SerializeField] private bool blockAttackWhilePlayerDeadOrRespawning = true;
 
+    [Header("Crowd / Anti-Stuck Spacing")]
+    [SerializeField] private bool useCrowdSpacing = true;
+    [SerializeField] private LayerMask enemySpacingMask;
+    [SerializeField] private float enemySeparationRadius = 0.85f;
+    [SerializeField] private float enemySeparationStrength = 1.4f;
+    [SerializeField] private float enemySeparationMaxStep = 0.055f;
+    [SerializeField] private bool keepPlayerBreathingRoom = true;
+    [SerializeField] private float playerPersonalSpaceRadius = 1.05f;
+    [SerializeField] private float playerPushAwayStrength = 1.8f;
+    [SerializeField] private float playerPushAwayMaxStep = 0.07f;
+    [SerializeField] private bool applySpacingWhileAttacking = true;
+
     [Header("Hit Reaction")]
     [SerializeField] private bool enableHitReaction = true;
     [SerializeField] private float hitReactionDuration = 0.10f;
@@ -76,11 +88,32 @@ public class ZoneEnemyAI : MonoBehaviour
     private void Reset()
     {
         AutoSetupReferences();
+
+        if (enemySpacingMask.value == 0)
+        {
+            int enemyLayer = LayerMask.NameToLayer("Enemy");
+
+            if (enemyLayer >= 0)
+            {
+                enemySpacingMask = 1 << enemyLayer;
+            }
+        }
     }
 
     private void Awake()
     {
         AutoSetupReferences();
+
+        if (enemySpacingMask.value == 0)
+        {
+            int enemyLayer = LayerMask.NameToLayer("Enemy");
+
+            if (enemyLayer >= 0)
+            {
+                enemySpacingMask = 1 << enemyLayer;
+            }
+        }
+
         EnterIdle();
         lastLoggedState = currentState;
     }
@@ -127,11 +160,13 @@ public class ZoneEnemyAI : MonoBehaviour
         if (hasPlayerInZone)
         {
             HandleCombat(player);
+            ApplyCrowdSpacingIfNeeded(player);
             LogStateIfChanged();
             return;
         }
 
         HandleNoPlayerBehavior();
+        ApplyCrowdSpacingIfNeeded(null);
         LogStateIfChanged();
     }
 
@@ -369,6 +404,121 @@ public class ZoneEnemyAI : MonoBehaviour
 
         player.SendMessage("TakeDamage", damage, SendMessageOptions.DontRequireReceiver);
         player.SendMessage("TakeDamage", (float)damage, SendMessageOptions.DontRequireReceiver);
+    }
+
+    private void ApplyCrowdSpacingIfNeeded(Transform player)
+    {
+        if (!useCrowdSpacing)
+            return;
+
+        if (!applySpacingWhileAttacking && currentState == State.Attack)
+            return;
+
+        Vector3 separation = Vector3.zero;
+
+        separation += CalculateEnemySeparation();
+        separation += CalculatePlayerPersonalSpacePush(player);
+
+        separation.y = 0f;
+
+        if (separation.sqrMagnitude <= 0.0001f)
+            return;
+
+        float maxStep = Mathf.Max(enemySeparationMaxStep, playerPushAwayMaxStep);
+        Vector3 step = Vector3.ClampMagnitude(separation, maxStep);
+
+        Vector3 next = transform.position + step;
+        next = ClampPointInsideZone(next);
+        next = GetGroundAdjustedPosition(next);
+
+        transform.position = next;
+    }
+
+    private Vector3 CalculateEnemySeparation()
+    {
+        if (enemySpacingMask.value == 0)
+            return Vector3.zero;
+
+        Collider[] nearbyEnemies = Physics.OverlapSphere(
+            transform.position,
+            enemySeparationRadius,
+            enemySpacingMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        Vector3 separation = Vector3.zero;
+        int validCount = 0;
+
+        for (int i = 0; i < nearbyEnemies.Length; i++)
+        {
+            Collider other = nearbyEnemies[i];
+
+            if (other == null)
+                continue;
+
+            if (other.transform == transform || other.transform.IsChildOf(transform))
+                continue;
+
+            ZoneEnemyAI otherAI = other.GetComponentInParent<ZoneEnemyAI>();
+
+            if (otherAI == null || otherAI == this)
+                continue;
+
+            Vector3 away = transform.position - otherAI.transform.position;
+            away.y = 0f;
+
+            float distance = away.magnitude;
+
+            if (distance <= 0.001f)
+            {
+                away = Random.insideUnitSphere;
+                away.y = 0f;
+                distance = 0.1f;
+            }
+
+            if (distance > enemySeparationRadius)
+                continue;
+
+            float strength = 1f - Mathf.Clamp01(distance / enemySeparationRadius);
+            separation += away.normalized * strength * enemySeparationStrength;
+            validCount++;
+        }
+
+        if (validCount > 0)
+        {
+            separation /= validCount;
+        }
+
+        return Vector3.ClampMagnitude(separation, enemySeparationMaxStep);
+    }
+
+    private Vector3 CalculatePlayerPersonalSpacePush(Transform player)
+    {
+        if (!keepPlayerBreathingRoom)
+            return Vector3.zero;
+
+        if (player == null)
+            return Vector3.zero;
+
+        Vector3 away = transform.position - player.position;
+        away.y = 0f;
+
+        float distance = away.magnitude;
+
+        if (distance <= 0.001f)
+        {
+            away = -transform.forward;
+            away.y = 0f;
+            distance = 0.1f;
+        }
+
+        if (distance >= playerPersonalSpaceRadius)
+            return Vector3.zero;
+
+        float strength = 1f - Mathf.Clamp01(distance / playerPersonalSpaceRadius);
+        Vector3 push = away.normalized * strength * playerPushAwayStrength;
+
+        return Vector3.ClampMagnitude(push, playerPushAwayMaxStep);
     }
 
     public void TakeDamage(int damageAmount)
